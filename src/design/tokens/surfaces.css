@@ -1,0 +1,20 @@
+:root{
+/* Hard polygon edges: radii are 0 or 2px. Nothing in this system is pill-shaped. */
+--radius-none:0px;
+--radius-hair:2px;
+--radius-max:2px;
+
+--border-width:1px;
+--border-width-strong:2px;
+--border-hud:1px solid var(--border-hairline);
+
+/* Flat shading: no gradients, no blur, no soft shadows. Depth comes from
+   one hard offset silhouette or from a 1px border only. */
+--shadow-none:none;
+--shadow-hard:4px 4px 0 var(--void);
+--shadow-hard-red:4px 4px 0 var(--red);
+
+--hazard-band:repeating-linear-gradient(135deg,var(--chalk) 0 10px,var(--red) 10px 20px);
+--lane-dash:repeating-linear-gradient(to right,var(--chalk) 0 24px,transparent 24px 56px);
+--scrim:var(--surface-overlay);
+}

@@ -1,0 +1,36 @@
+:root{
+--font-display:"Anton",Impact,"Arial Narrow Bold",sans-serif;
+--font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+
+/* Display / numeric readouts — Anton, always tight, never letter-spaced wide */
+--size-hero:112px;    --lh-hero:.86;
+--size-display-1:72px;--lh-display-1:.9;
+--size-display-2:48px;--lh-display-2:.94;
+--size-display-3:32px;--lh-display-3:1;
+--size-display-4:24px;--lh-display-4:1.05;
+--track-display:-0.01em;
+
+/* Mono labels — uppercase, generously tracked */
+--size-label-lg:14px;
+--size-label:12px;
+--size-label-sm:11px;
+--size-label-xs:10px;
+--size-body:14px;     --lh-body:1.55;
+--track-label:0.18em;
+--track-label-tight:0.1em;
+--weight-mono:400;
+--weight-mono-strong:700;
+}
+.dh-hero,.dh-display-1,.dh-display-2,.dh-display-3,.dh-display-4{font-family:var(--font-display);letter-spacing:var(--track-display);color:var(--text-primary);margin:0;font-weight:400}
+.dh-hero{font-size:var(--size-hero);line-height:var(--lh-hero)}
+.dh-display-1{font-size:var(--size-display-1);line-height:var(--lh-display-1)}
+.dh-display-2{font-size:var(--size-display-2);line-height:var(--lh-display-2)}
+.dh-display-3{font-size:var(--size-display-3);line-height:var(--lh-display-3)}
+.dh-display-4{font-size:var(--size-display-4);line-height:var(--lh-display-4)}
+.dh-label,.dh-label-lg,.dh-label-sm,.dh-label-xs{font-family:var(--font-mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--text-secondary);margin:0}
+.dh-label-lg{font-size:var(--size-label-lg)}
+.dh-label{font-size:var(--size-label)}
+.dh-label-sm{font-size:var(--size-label-sm)}
+.dh-label-xs{font-size:var(--size-label-xs)}
+.dh-body{font-family:var(--font-mono);font-size:var(--size-body);line-height:var(--lh-body);letter-spacing:0;color:var(--text-secondary);margin:0}
+.dh-num{font-family:var(--font-display);font-variant-numeric:tabular-nums;color:var(--text-primary)}

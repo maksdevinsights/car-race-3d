@@ -1,0 +1,48 @@
+:root{
+/* --- Base palette: these seven values are the entire system. No others. --- */
+--void:#0D1117;      /* near-black — sky, far horizon, app background */
+--slate:#161B22;     /* dark slate — ground either side of the road */
+--asphalt:#1C2128;   /* asphalt — the road surface, panel fills */
+--edge:#30363D;      /* edges, kerbs, low hills, all borders */
+--chalk:#E6EDF3;     /* off-white — lane markings, primary HUD text */
+--ash:#8B949E;       /* grey — secondary HUD labels */
+--red:#F85149;       /* the ONLY saturated colour: player car + every hazard */
+
+/* --- Semantic surfaces --- */
+--surface-sky:var(--void);
+--surface-ground:var(--slate);
+--surface-road:var(--asphalt);
+--surface-panel:var(--asphalt);
+--surface-panel-raised:var(--edge);
+--surface-overlay:rgba(13,17,23,.82);
+
+/* --- Semantic text --- */
+--text-primary:var(--chalk);
+--text-secondary:var(--ash);
+--text-inverse:var(--void);
+--text-hazard:var(--red);
+
+/* --- Lines --- */
+--border-hairline:var(--edge);
+--border-strong:var(--ash);
+--lane-marking:var(--chalk);
+
+/* --- Interactive --- */
+--action-fill:var(--red);
+/* Hover/press never tint red — they invert to the off-white/grey pair, so the
+   palette stays at exactly seven values. */
+--action-fill-hover:var(--chalk);
+--action-fill-press:var(--ash);
+--action-text-on-fill:var(--void);
+--action-ghost-border:var(--edge);
+--action-disabled-fill:var(--edge);
+--action-disabled-text:var(--ash);
+
+/* --- Status: red or nothing. There is no green, amber or blue in this world. --- */
+--status-hazard:var(--red);
+--status-neutral:var(--ash);
+--status-ok:var(--chalk);
+
+/* --- Focus --- */
+--focus-ring:var(--chalk);
+}

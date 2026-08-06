@@ -1,0 +1,13 @@
+:root{
+/* 4px base, doubling — HUD gutters are large, panel padding is small */
+--space-0:0px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;
+--space-5:20px;--space-6:24px;--space-8:32px;--space-10:40px;--space-12:48px;
+--space-16:64px;--space-20:80px;
+
+--hud-gutter:32px;        /* distance from HUD cluster to viewport edge */
+--panel-pad-x:16px;
+--panel-pad-y:12px;
+--stack-tight:8px;
+--stack:16px;
+--stack-loose:32px;
+}
