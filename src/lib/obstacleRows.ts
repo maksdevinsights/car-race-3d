@@ -1,5 +1,6 @@
-/** Road surface runs from x = -4 to x = +4. */
-export const ROAD_HALF_WIDTH = 4
+import { ROAD_HALF_WIDTH } from './roadNetwork'
+
+/** Rows are laid across one road, whose surface runs from -4 to +4. */
 
 /**
  * The player car is 1.8 m wide, so a row that leaves less than this much

@@ -21,57 +21,85 @@ export const OBSTACLE_SIZES: Size[] = [
 /** Near misses should read as near misses, so the car's box is forgiving. */
 export const CAR_HITBOX_SCALE = 0.8
 
-export type Box = {
-  minX: number
-  maxX: number
-  minY: number
-  maxY: number
-  minZ: number
-  maxZ: number
+/** An axis-aligned footprint on the ground. Every collider in the world is one. */
+export type Rect = { minX: number; maxX: number; minZ: number; maxZ: number }
+
+/** The car's footprint: centre, heading (rotation.y) and half extents. */
+export type Body = { x: number; z: number; yaw: number; halfWidth: number; halfLength: number }
+
+/** Which way to move the body out of a collider, and how far. */
+export type Contact = { nx: number; nz: number; depth: number }
+
+export function carBody(x: number, z: number, yaw: number, scale = 1, out?: Body): Body {
+  const body = out ?? { x: 0, z: 0, yaw: 0, halfWidth: 0, halfLength: 0 }
+  body.x = x
+  body.z = z
+  body.yaw = yaw
+  body.halfWidth = (CAR_SIZE.x * scale) / 2
+  body.halfLength = (CAR_SIZE.z * scale) / 2
+  return body
 }
 
-export function makeBox(): Box {
-  return { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 }
+/** Ground-plane bounds of a turned body, for the broad phase. */
+export function bodyBounds(body: Body, margin: number, out: Rect): Rect {
+  const sin = Math.abs(Math.sin(body.yaw))
+  const cos = Math.abs(Math.cos(body.yaw))
+  const ex = body.halfWidth * cos + body.halfLength * sin + margin
+  const ez = body.halfWidth * sin + body.halfLength * cos + margin
+  out.minX = body.x - ex
+  out.maxX = body.x + ex
+  out.minZ = body.z - ez
+  out.maxZ = body.z + ez
+  return out
 }
 
 /**
- * Writes the axis-aligned box for a model standing at (x, z). Every model has
- * its origin on the ground, so the box runs from y = 0 upward, and any scaling
- * shrinks it about its own centre rather than sinking it into the road.
+ * Narrow phase: the same box-against-box test as the original, with one
+ * change — the car's box turns with the car. Two boxes on the ground are
+ * apart if they are apart along any of four axes (world X and Z, the car's
+ * side and nose); otherwise they touch, and the axis with the least overlap
+ * is the shortest way out. Height is not tested: everything stands on the
+ * road, and the car is shorter than nothing it can hit.
+ *
+ * Writes the push that would move the body clear into `out` and returns
+ * true, or returns false if the two do not touch.
  */
-export function boxAt(target: Box, size: Size, x: number, z: number, scale = 1): Box {
-  const halfX = (size.x * scale) / 2
-  const halfY = (size.y * scale) / 2
-  const halfZ = (size.z * scale) / 2
-  const centreY = size.y / 2
+export function boxContact(body: Body, rect: Rect, out: Contact): boolean {
+  const sin = Math.sin(body.yaw)
+  const cos = Math.cos(body.yaw)
+  // The car's side (+X at yaw 0) and nose (+Z at yaw 0) in world space.
+  const sideX = cos
+  const sideZ = -sin
+  const noseX = sin
+  const noseZ = cos
 
-  target.minX = x - halfX
-  target.maxX = x + halfX
-  target.minY = centreY - halfY
-  target.maxY = centreY + halfY
-  target.minZ = z - halfZ
-  target.maxZ = z + halfZ
-  return target
-}
+  const ex = (rect.maxX - rect.minX) / 2
+  const ez = (rect.maxZ - rect.minZ) / 2
+  // From the collider's centre to the car's.
+  const dx = body.x - (rect.minX + rect.maxX) / 2
+  const dz = body.z - (rect.minZ + rect.maxZ) / 2
 
-export function overlaps(a: Box, b: Box): boolean {
+  let best = Infinity
+  const consider = (ax: number, az: number, carRadius: number, rectRadius: number) => {
+    const distance = dx * ax + dz * az
+    const overlap = carRadius + rectRadius - Math.abs(distance)
+    if (overlap <= 0) return false
+    if (overlap < best) {
+      best = overlap
+      const sign = distance < 0 ? -1 : 1
+      out.nx = ax * sign
+      out.nz = az * sign
+      out.depth = overlap
+    }
+    return true
+  }
+
+  const w = body.halfWidth
+  const l = body.halfLength
   return (
-    a.minX < b.maxX &&
-    a.maxX > b.minX &&
-    a.minY < b.maxY &&
-    a.maxY > b.minY &&
-    a.minZ < b.maxZ &&
-    a.maxZ > b.minZ
+    consider(1, 0, w * Math.abs(sideX) + l * Math.abs(noseX), ex) &&
+    consider(0, 1, w * Math.abs(sideZ) + l * Math.abs(noseZ), ez) &&
+    consider(sideX, sideZ, w, ex * Math.abs(sideX) + ez * Math.abs(sideZ)) &&
+    consider(noseX, noseZ, l, ex * Math.abs(noseX) + ez * Math.abs(noseZ))
   )
 }
-
-/** Broad phase: obstacles further ahead than this are not worth testing. */
-export const TEST_RANGE_AHEAD = 20
-
-/**
- * How far behind the car an obstacle can still be touching it: half the car's
- * shrunken length plus half the longest obstacle. The margin keeps the broad
- * phase off the exact contact boundary, where rounding could drop a real hit.
- */
-export const TEST_RANGE_BEHIND =
-  (CAR_SIZE.z * CAR_HITBOX_SCALE) / 2 + Math.max(...OBSTACLE_SIZES.map((s) => s.z)) / 2 + 0.5

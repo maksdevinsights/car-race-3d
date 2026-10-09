@@ -16,3 +16,15 @@ export const MAX_DELTA = 1 / 30
 export function clampDelta(delta: number): number {
   return Math.min(delta, MAX_DELTA)
 }
+
+/**
+ * useFrame priorities, lowest runs first. All negative: a positive priority
+ * tells R3F the subscriber will call render itself.
+ *
+ * The car moves first; the world then reacts to where it now is (recycling,
+ * collision, score); the camera follows the settled car; anything culled to
+ * the view runs once the camera has moved; a debug view reads the finished
+ * frame last. Left to mount order, collision would test the car
+ * where it stood a frame ago.
+ */
+export const FRAME_ORDER = { car: -4, world: -3, camera: -2, view: -1.5, debug: -1 } as const

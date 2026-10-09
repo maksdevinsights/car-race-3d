@@ -1,106 +1,131 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import type { Group } from 'three'
-import { CAR_HITBOX_SCALE, CAR_SIZE, OBSTACLE_SIZES } from '../lib/collision'
-import { clampDelta } from '../lib/frame'
-import { INVULNERABLE_SECONDS, registerHit, travel, usePhase } from '../game/store'
+import type { Group, PerspectiveCamera } from 'three'
+import type { RefObject } from 'react'
+import { makeCar } from '../lib/carModel'
+import { pushPointOut, solidsNear } from '../lib/colliders'
+import { CAR_HITBOX_SCALE, CAR_SIZE, OBSTACLE_SIZES, boxContact, carBody } from '../lib/collision'
+import { FRAME_ORDER } from '../lib/frame'
+import { INVULNERABLE_SECONDS, getGameState, grantTime, registerHit, travel, usePhase } from '../game/store'
+import { ChaseCamera } from './ChaseCamera'
+import { DebugView } from './DebugView'
 import { Obstacles } from './Obstacles'
 import { PlayerCar } from './PlayerCar'
-import { RoadSegment, SEGMENT_LENGTH } from './RoadSegment'
+import { RoadNetwork } from './RoadNetwork'
 import { Roadside } from './Roadside'
-
-/** Scroll speed of the world, in metres per second. */
-export const SPEED = 16
-
-/**
- * Everything is in metres, Y up, road running along +Z, and the car nose
- * points at +Z. Edge lines are at x = ±3.72, centre dashes at x = 0.
- *
- * The car holds station at z = 0 and the camera never moves. The world
- * scrolls toward the camera along -Z instead; the car only steers across it.
- */
-
-/** Matches the camera in App.tsx: 6 m behind the car, which sits at z = 0. */
-const CAMERA_Z = -6
+import { Route } from './Route'
+import { Town } from './Town'
 
 /**
- * Enough segments to cover the visible distance ahead. Their combined length
- * is also the recycle stride: shifting one segment forward by the full span
- * lands it exactly where the queue ends, so the tiling stays seamless.
+ * Everything is in metres, Y up. The car starts at the origin, nose along +Z,
+ * on avenue 0 of the road grid in lib/roadNetwork.ts, and drives through it in
+ * world space; the camera trails it. Roads, the town in the blocks between
+ * them, and the ground are laid from the grid around wherever the car is.
  */
-const SEGMENT_COUNT = 16
-const SEGMENT_SPAN = SEGMENT_COUNT * SEGMENT_LENGTH
 
-/** A segment is spent once its far edge has cleared the camera. */
-const SEGMENT_RECYCLE_Z = CAMERA_Z - SEGMENT_LENGTH / 2
-
-const SEGMENT_Z = Array.from(
-  { length: SEGMENT_COUNT },
-  (_, i) => SEGMENT_RECYCLE_Z + SEGMENT_LENGTH / 2 + i * SEGMENT_LENGTH,
-)
+/** Car length (shrunken) plus the longest obstacle: the most road a contact can span. */
+const CONTACT_LENGTH = CAR_SIZE.z * CAR_HITBOX_SCALE + Math.max(...OBSTACLE_SIZES.map((s) => s.z))
 
 /**
- * Longest a single obstacle can stay in contact: the car's shrunken length
- * plus the longest obstacle, at the speed they close on each other. The
- * invulnerability window has to outlast this, or one stalled car would take
- * several lives on the way past.
+ * Below this the flash would run for many seconds; a car crawling through an
+ * obstacle is a known gap until collision is rebuilt (MIGRATION.md step 5).
  */
-const LONGEST_CONTACT =
-  (CAR_SIZE.z * CAR_HITBOX_SCALE + Math.max(...OBSTACLE_SIZES.map((s) => s.z))) / SPEED
+const MIN_CONTACT_SPEED = 2
 
-export function Scene() {
-  const segments = useRef<(Group | null)[]>([])
+export type SceneProps = {
+  /** Present only on /debug: swaps in the top-down view and feeds this readout. */
+  debugReadout?: RefObject<HTMLDivElement | null>
+}
+
+export function Scene({ debugReadout }: SceneProps) {
   const car = useRef<Group | null>(null)
+  const state = useRef(makeCar())
+  const camera = useRef<PerspectiveCamera | null>(null)
   const flash = useRef(0)
+  const last = useRef({ x: 0, z: 0 })
+  const target = useRef<[number, number] | null>(null)
 
   const phase = usePhase()
-  // The world keeps rolling behind the start screen, and stops dead on the
-  // game-over card.
-  const speed = phase === 'over' ? 0 : SPEED
+
+  // Dev builds only: lets scripts/verify.mjs read the car and camera to drive
+  // its route. Vite strips this branch from production builds.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const contact = { nx: 0, nz: 0, depth: 0 }
+    const hook = {
+      car: state.current,
+      camera,
+      game: getGameState,
+      /** Lets a scripted route run longer than the delivery clock allows. */
+      grantTime,
+      /** The current delivery point, [x, z]. */
+      target: () => target.current,
+      /** Is the chase camera standing inside a building? */
+      cameraInside: () => {
+        const at = camera.current?.position
+        return at ? pushPointOut(at.x, at.z).some((v) => v !== 0) : false
+      },
+      /** Deepest overlap of the car body with anything solid, in metres. */
+      carOverlap: () => {
+        const { x, z, yaw } = state.current
+        const body = carBody(x, z, yaw)
+        let deepest = 0
+        for (const rect of solidsNear(body)) {
+          if (boxContact(body, rect, contact)) deepest = Math.max(deepest, contact.depth)
+        }
+        return deepest
+      },
+    }
+    Object.assign(window, { __nightHighway: hook })
+    return () => {
+      if ((window as { __nightHighway?: unknown }).__nightHighway === hook) {
+        Object.assign(window, { __nightHighway: undefined })
+      }
+    }
+  }, [])
 
   const handleHit = () => {
     // Invulnerable, so this contact costs nothing — and the same window stops
     // one obstacle registering on every frame it overlaps.
     if (flash.current > 0) return
-    flash.current = Math.max(INVULNERABLE_SECONDS, LONGEST_CONTACT + 0.1)
+    // Long enough for the obstacle to clear the car at the current speed,
+    // which is no longer fixed.
+    const contact = CONTACT_LENGTH / Math.max(Math.abs(state.current.forward), MIN_CONTACT_SPEED)
+    flash.current = Math.max(INVULNERABLE_SECONDS, contact + 0.1)
     registerHit()
   }
 
-  useFrame((_, rawDelta) => {
-    const delta = clampDelta(rawDelta)
-    const moved = speed * delta
-    for (const segment of segments.current) {
-      if (!segment) continue
-      segment.position.z -= moved
-      // `while` rather than `if`: a long frame (tab regains focus) can carry a
-      // segment back further than a single stride.
-      while (segment.position.z < SEGMENT_RECYCLE_Z) {
-        segment.position.z += SEGMENT_SPAN
-      }
-    }
-    // Score is distance; travel() ignores anything outside a live run.
-    travel(moved)
-  })
+  useFrame(() => {
+    const { x, z } = state.current
+    // Distance actually driven, whichever way: shown at the end of a run,
+    // not scored. travel() ignores anything outside a live run.
+    travel(Math.hypot(x - last.current.x, z - last.current.z))
+    last.current.x = x
+    last.current.z = z
+  }, FRAME_ORDER.world)
 
   return (
     <group>
-      <Roadside speed={speed} />
+      <ChaseCamera carRef={car} cameraRef={camera} makeDefault={!debugReadout} />
+      {debugReadout && (
+        <DebugView carRef={car} state={state} cameraRef={camera} readout={debugReadout} />
+      )}
 
-      {SEGMENT_Z.map((z, i) => (
-        <group
-          key={i}
-          ref={(el) => {
-            segments.current[i] = el
-          }}
-          position={[0, 0, z]}
-        >
-          <RoadSegment />
-        </group>
-      ))}
+      <Roadside carRef={car} />
+      <RoadNetwork carRef={car} />
+      <Town carRef={car} />
+      <Obstacles carRef={car} onHit={handleHit} />
+      <Route carRef={car} playing={phase === 'playing'} targetRef={target} />
 
-      <Obstacles speed={speed} carRef={car} onHit={handleHit} />
-
-      <PlayerCar carRef={car} flash={flash} steerable={phase === 'playing'} />
+      <PlayerCar
+        carRef={car}
+        state={state}
+        flash={flash}
+        // The car keeps cruising behind the start screen, and stops dead on
+        // the game-over card.
+        driving={phase !== 'over'}
+        steerable={phase === 'playing'}
+      />
     </group>
   )
 }

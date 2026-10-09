@@ -43,9 +43,16 @@ the meshes at runtime.
 
 Every prompt, one per file: **[`PROMPTS/`](PROMPTS/)**
 
-The build stops at **C6**. The difficulty ramp (C7) and the performance pass
-(C8) were written but never run, so the speed is a fixed 16 m/s and no frame
-numbers are claimed anywhere.
+The first build stopped at **C6**. The difficulty ramp (C7) and the
+performance pass (C8) were written but never run.
+
+A second iteration, **T0 … T7**, also in Claude Code, broke the treadmill: the
+car drives through a town in world space. T0 is the migration plan
+([`MIGRATION.md`](MIGRATION.md)), T1–T5 build it (world-space car, steering,
+town, collision), T6 sets up the screenshot verification loop
+([`VERIFY.md`](VERIFY.md)), and T7 is the final pass: performance against the
+original road, delivery scoring, and a last verification run. Where Claude
+Code stopped to ask something (T2, T3), the file notes what happened.
 
 ## Running it
 
@@ -63,55 +70,54 @@ Then open the printed localhost URL.
 ```bash
 npm run build    # tsc -b && vite build
 npm run lint     # oxlint
+npm run verify   # scripted drive through the town, screenshots in verify-shots/ (see VERIFY.md)
+npm run perf     # frame cost of a production build; --root <checkout> to measure another
 ```
+
+`/debug` shows the same run from above: the car's trail, the chase camera, and
+the colliders being tested each frame.
 
 ## Controls
 
 | Key | Action |
 |---|---|
 | `←` `→` or `A` `D` | Steer |
+| `↑` `↓` or `W` `S` | Accelerate, brake (hold to reverse) |
 | `Enter` | Start, and retry after game over |
 
-Three lives. A hit costs one and gives a second of invulnerability with the car
-flashing. Score is metres travelled.
+## Playing
+
+Drive to the beacon — the white column over a junction — before the clock runs
+out. Each delivery banks the leg's distance along the street grid and adds time
+for the next leg, two to four blocks away. The run ends when the clock reaches
+zero or the last of three lives is lost to an obstacle.
+
+Score is **metres delivered**, not metres driven: circling a block or getting
+lost costs time and earns nothing. Walls do not cost lives — they cost speed,
+and so time.
 
 ## How it works
 
-The car and the camera never move. The **world scrolls past them** — road
-segments, scenery and obstacles all travel toward the camera and recycle to the
-back of the queue once they pass behind it. That single trick is the whole
-illusion, and it is why nothing here needs a physics engine.
+The car drives through an endless street grid in world space; the camera trails
+it. Nothing is a physics engine.
 
 | Path | What |
 |---|---|
-| `src/components/` | The 3D scene — assets, scrolling road, scenery, player car, obstacle pool |
-| `src/lib/` | Pure logic: obstacle row generation, AABB collision, frame-delta clamp |
-| `src/game/store.ts` | Game state — phase, lives, score |
+| `src/lib/roadNetwork.ts` | The grid: where tarmac is. Everything else asks it |
+| `src/lib/town.ts` | Every block's buildings, windows, lots and props, generated from the block's own seed |
+| `src/lib/carModel.ts` | Bicycle steering with a grip limit, off-road drag, wall contact |
+| `src/lib/colliders.ts`, `collision.ts` | Spatial hash on the road grid; turned-box narrow phase |
+| `src/lib/route.ts` | Deliveries: picking legs, scoring them, the time allowance |
+| `src/components/` | The scene: road and town (instanced, culled per block), car, chase camera, obstacles, beacon |
+| `src/game/store.ts` | Game state — phase, lives, score, clock |
 | `src/ui/Hud.tsx` | Start screen, in-run HUD, game-over card |
-| `src/design/` | Design system ported from the Claude Design handoff — tokens and primitives |
-| `public/models/` | The five GLBs |
-
-A few decisions worth knowing about, all of them Claude's:
-
-- **Object pooling.** Every obstacle slot owns one of each of the three types up
-  front; a row is "dressed" by moving slots and toggling which variant is
-  visible. 45 clones, allocated once, never destroyed.
-- **Guaranteed-passable rows.** Obstacle rows are rejection-sampled until at
-  least 2.5 m of continuous clear road remains, so the game is never randomly
-  unwinnable.
-- **A forgiving hitbox.** The car's collision box is 80% of its visual size, so
-  near misses read as near misses.
-- **A clamped timestep.** Frames are integrated at 1/30 s maximum. Without it, a
-  backgrounded tab resumes with a multi-second delta, the world jumps ~48 m in
-  one step, and obstacles tunnel clean through the car.
+| `scripts/` | The verification and performance loops |
+| `MIGRATION.md` | How the corridor became a town, and in what order |
 
 ## Known gaps
 
-- Speed never ramps; difficulty is flat (C7 not run).
-- Never profiled; geometry is not instanced (C8 not run).
 - No sound, no mobile/touch input, no high-score persistence.
-- Obstacles pass through the car rather than crashing into it — a hit is a flash
-  and a lost life, nothing more.
-- The verification done during the build (row-generation and collision checks
-  over 200k samples) was run as throwaway scripts and is not committed, so there
-  is nothing to `npm test` here.
+- Obstacles only stand on the avenue the car starts on.
+- Side walls exposed above a lower neighbour have no windows (see VERIFY.md).
+- The 200k-sample checks run during the build are still throwaway scripts;
+  `npm run verify` is the only committed check.

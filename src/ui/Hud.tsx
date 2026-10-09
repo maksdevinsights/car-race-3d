@@ -4,6 +4,7 @@ import { Button } from '../design/components/Button'
 import { Panel } from '../design/components/Panel'
 import { Stat } from '../design/components/Stat'
 import { STARTING_LIVES, returnToMenu, startRun, useGame } from '../game/store'
+import type { GameState } from '../game/store'
 
 /**
  * DOM overlay above the canvas. The layer itself ignores the pointer so it
@@ -21,8 +22,12 @@ const SCRIM: React.CSSProperties = {
   pointerEvents: 'auto',
 }
 
+/** Under this many seconds the clock turns hazard red. */
+const LOW_TIME = 10
+
 export function Hud() {
-  const { phase, lives, score } = useGame()
+  const game = useGame()
+  const { phase } = game
 
   // The handoff's main menu offers Drive on Enter; carry that to retry too.
   useEffect(() => {
@@ -37,8 +42,8 @@ export function Hud() {
   }, [phase])
 
   if (phase === 'start') return <StartCard />
-  if (phase === 'over') return <GameOverCard score={score} />
-  return <RunHud lives={lives} score={score} />
+  if (phase === 'over') return <GameOverCard game={game} />
+  return <RunHud game={game} />
 }
 
 function StartCard() {
@@ -76,7 +81,9 @@ function StartCard() {
           Desert Route 9 &middot; {STARTING_LIVES} lives &middot; night
         </div>
         <p style={{ marginTop: 'var(--space-6)', maxWidth: 380 }} className="dh-body">
-          Steer with the arrow keys or A and D. Obstacles cost a life; you get three.
+          Drive to the beacon before the clock runs out. Every delivery banks its distance and buys
+          time for the next. Steer with the arrow keys or A and D, speed up and brake with up and down
+          or W and S; hold brake to reverse. Brake for the corners. Obstacles cost a life; you get three.
         </p>
         <div
           style={{
@@ -96,7 +103,8 @@ function StartCard() {
   )
 }
 
-function RunHud({ lives, score }: { lives: number; score: number }) {
+function RunHud({ game }: { game: GameState }) {
+  const { lives, score, timeLeft, nextDistance, nextBearing } = game
   return (
     <div style={LAYER}>
       <div style={{ position: 'absolute', left: 'var(--hud-gutter)', top: 'var(--hud-gutter)' }}>
@@ -109,13 +117,53 @@ function RunHud({ lives, score }: { lives: number; score: number }) {
           top: 'var(--hud-gutter)',
         }}
       >
-        <Stat label="Score" value={score} unit="M" align="right" />
+        <Stat label="Delivered" value={score} unit="M" align="right" />
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          left: '50%',
+          bottom: 'var(--hud-gutter)',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: 'var(--space-10)',
+        }}
+      >
+        <Stat label="Time" value={timeLeft} unit="S" align="center" hazard={timeLeft <= LOW_TIME} />
+        {nextDistance !== null && (
+          <Stat
+            label="Next"
+            align="center"
+            unit="M"
+            value={
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
+                {/* Up is the car's nose; the bearing is positive to the left. */}
+                <span
+                  aria-hidden
+                  style={{
+                    display: 'inline-block',
+                    fontSize: 'var(--size-display-4)',
+                    transform: `rotate(${-nextBearing}deg)`,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  ▲
+                </span>
+                {nextDistance}
+              </span>
+            }
+          />
+        )}
       </div>
     </div>
   )
 }
 
-function GameOverCard({ score }: { score: number }) {
+const END_LINE = { time: 'Out of time', wrecked: 'Wrecked' } as const
+
+function GameOverCard({ game }: { game: GameState }) {
+  const { score, deliveries, driven, reason } = game
   return (
     <div style={{ ...SCRIM, display: 'grid', placeItems: 'center' }}>
       <Panel raised style={{ width: 460, padding: 'var(--space-10)' }}>
@@ -136,12 +184,14 @@ function GameOverCard({ score }: { score: number }) {
               color: 'var(--text-primary)',
             }}
           >
-            Game over
+            {reason ? END_LINE[reason] : 'Game over'}
           </div>
         </div>
 
-        <div style={{ padding: 'var(--space-6) 0' }}>
-          <Stat label="Final score" value={score} unit="M" size="lg" />
+        <div style={{ padding: 'var(--space-6) 0', display: 'flex', alignItems: 'flex-end', gap: 'var(--space-8)' }}>
+          <Stat label="Delivered" value={score} unit="M" size="lg" />
+          <Stat label="Drops" value={deliveries} />
+          <Stat label="Driven" value={driven} unit="M" />
         </div>
 
         <div

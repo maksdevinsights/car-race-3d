@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Screenshots from npm run verify
+verify-shots
+
+# Builds made by scripts/devServer.mjs
+dist-scripts
